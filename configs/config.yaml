@@ -1,0 +1,67 @@
+# =====================================================================
+# Cấu hình trung tâm. Mọi script đọc file này (có thể override bằng --set a.b=value)
+# Đường dẫn tương đối được tính từ thư mục gốc project (energy_ts/)
+# =====================================================================
+
+paths:
+  raw_csv: data/raw/energydata_complete.csv   # INPUT: bạn tự tải từ UCI và đặt vào đây
+  processed_dir: data/processed               # OUTPUT của preprocess
+  output_dir: outputs                         # OUTPUT của eda / baselines / train / evaluate / attention
+
+data:
+  date_col: date
+  target_col: Appliances          # đơn vị Wh, đo mỗi 10 phút
+  drop_cols: [rv1, rv2]           # 2 biến ngẫu nhiên của dataset gốc (nhiễu, dùng để kiểm tra feature selection)
+  expected_rows: 19735            # dùng để cảnh báo nếu file tải về khác bản gốc
+  freq_minutes: 10
+  add_time_features: true         # hour_sin/cos, dow_sin/cos, is_weekend
+  use_target_as_input: true       # đưa lịch sử Appliances vào input (autoregressive features)
+  target_transform: log1p          # none | log1p  (QUYẾT ĐỊNH MỞ - xem doc/11_decisions_log.md)
+
+window:
+  lookback: 36                    # L: số bước quá khứ làm input (36 x 10 phút = 6 giờ)
+  horizon: 6                      # H: dự đoán Appliances tại t+6 (= 1 giờ sau bước cuối của window)
+
+split:                            # chia THEO THỜI GIAN (không shuffle), theo chỉ số của bước target
+  train: 0.70
+  val: 0.15
+  test: 0.15
+
+transformer:
+  d_model: 64
+  nhead: 4
+  num_layers: 2
+  dim_ff: 128
+  dropout: 0.1
+  pooling: cls                    # cls | mean | last  (cls cho attention map dễ diễn giải)
+
+lstm:
+  hidden: 64
+  num_layers: 2
+  dropout: 0.1
+
+train:
+  seeds: [0, 1, 2]
+  batch_size: 128
+  epochs: 100
+  lr: 0.001
+  weight_decay: 0.0001
+  patience: 12                    # early stopping theo val RMSE (đơn vị Wh)
+  grad_clip: 1.0
+  loss: mse                       # mse | huber
+  num_workers: 0
+  device: auto                    # auto | cpu | cuda
+
+baselines:
+  ridge_alphas: [0.1, 1, 10, 100, 1000, 10000]
+  daily_lag_steps: 144            # 144 x 10 phút = 24 giờ (seasonal naive)
+
+eval:
+  bootstrap_block: 36             # độ dài block cho moving-block bootstrap
+  bootstrap_n: 1000
+  plot_points: 432                # 3 ngày để vẽ pred vs actual
+
+attention:
+  n_examples: 4
+  high_quantile: 0.90             # nhóm "tiêu thụ cao" = target >= P90
+  permutation_repeats: 3
